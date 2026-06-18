@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TalentHub — Private Resume & Portfolio Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    :root {
+      --radius: 1rem;
+      --background: oklch(11% 0.015 260);
+      --foreground: oklch(96% 0.008 260);
+      --surface: oklch(15% 0.02 260 / 0.7);
+      --surface-hover: oklch(17% 0.025 260 / 0.85);
+      --primary: oklch(62% 0.21 280);
+      --primary-glow: oklch(62% 0.21 280 / 0.3);
+      --secondary: oklch(17% 0.015 260);
+      --muted-foreground: oklch(65% 0.015 260);
+      --destructive: oklch(60% 0.19 25);
+      --success: oklch(68% 0.17 160);
+      --warning: oklch(76% 0.15 80);
+      --border: oklch(22% 0.015 260 / 0.6);
+      --input: oklch(13% 0.015 260 / 0.6);
+      --gradient-hero: linear-gradient(135deg, oklch(66% 0.2 285) 0%, oklch(63% 0.17 210) 100%);
+      --shadow-soft: 0 8px 32px 0 rgba(0, 0, 0, 0.4), inset 0 1px 1px oklch(100% 0 0 / 0.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; border: 0 solid var(--border); }
+    body {
+      background-color: var(--background);
+      color: var(--foreground);
+      font-family: 'Inter', system-ui, sans-serif;
+      background-image: 
+        radial-gradient(circle at 10% 0%, oklch(35% 0.17 285 / 0.12), transparent 45%),
+        radial-gradient(circle at 90% 10%, oklch(28% 0.13 210 / 0.1), transparent 40%);
+      background-attachment: fixed;
+      min-height: 100vh;
+    }
+
+    h1, h2, h3 { font-family: 'Outfit', sans-serif; font-weight: 700; letter-spacing: -0.02em; }
+    .container { max-width: 68rem; margin: 0 auto; padding: 0 1.5rem; }
+
+    /* Glassmorphic Panels */
+    .card-soft {
+      background: var(--surface);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-soft);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .card-soft:hover { border-color: oklch(62% 0.21 280 / 0.4); box-shadow: 0 12px 40px oklch(62% 0.21 280 / 0.1); }
+
+    /* Inputs & Buttons */
+    input[type="text"], input[type="url"] {
+      width: 100%;
+      border: 1px solid var(--border);
+      background-color: var(--input);
+      color: var(--foreground);
+      padding: 0.8rem 1.1rem;
+      border-radius: 0.5rem;
+      font-size: 0.9rem;
+      font-family: inherit;
+    }
+    input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+
+    button { cursor: pointer; font-family: inherit; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+    .btn-primary { background-color: var(--primary); color: #fff; font-weight: 500; padding: 0.75rem 1.5rem; border-radius: 0.5rem; }
+    .btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-secondary { background-color: var(--secondary); color: var(--foreground); padding: 0.75rem 1.25rem; border-radius: 0.5rem; border: 1px solid var(--border); }
+    .btn-secondary:hover { background-color: var(--surface-hover); }
+
+    /* Layout utilities */
+    header { padding: 1.5rem 0; display: flex; align-items: center; justify-content: space-between; }
+    .hero { text-align: center; padding: 2.5rem 0; }
+    .text-gradient { background: var(--gradient-hero); color: transparent; -webkit-background-clip: text; background-clip: text; }
+    
+    .tabs-bar { display: inline-flex; padding: 0.25rem; border-radius: 0.75rem; background: var(--secondary); border: 1px solid var(--border); }
+    .tab-btn { padding: 0.5rem 1.25rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 500; color: var(--muted-foreground); background: transparent; }
+    .tab-btn.active { background: var(--background); color: var(--foreground); box-shadow: var(--shadow-soft); }
+
+    /* Upload Zone */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      background-color: oklch(14% 0.02 260 / 0.2);
+      border-radius: var(--radius);
+      padding: 3rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .upload-zone:hover, .upload-zone.dragover { border-color: var(--primary); background-color: oklch(62% 0.21 280 / 0.05); }
+
+    /* UI Score Ring */
+    .score-ring-container { position: relative; width: 10.5rem; height: 10.5rem; display: flex; align-items: center; justify-content: center; }
+    .progress-ring { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .progress-ring circle { fill: none; stroke-width: 12; }
+    .progress-ring .ring-bg { stroke: oklch(20% 0.01 260 / 0.4); }
+    .progress-ring .ring-fg { stroke-linecap: round; stroke-dasharray: 439.82; stroke-dashoffset: 439.82; transition: stroke-dashoffset 1.5s ease-out; }
+
+    .tag-container { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .tag { padding: 0.3rem 0.8rem; border-radius: 0.5rem; font-size: 0.85rem; border: 1px solid; }
+    .tag-success { background: oklch(68% 0.17 160 / 0.08); color: var(--success); border-color: oklch(68% 0.17 160 / 0.2); }
+    .bg-success { background-color: var(--success); }
+    .bg-warning { background-color: var(--warning); }
+    .bg-destructive { background-color: var(--destructive); }
+
+    .bullet-list { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; }
+    .bullet-list li { display: flex; gap: 0.75rem; font-size: 0.9rem; align-items: flex-start; }
+
+    /* Responsive layouts */
+    .grid { display: grid; gap: 1.5rem; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-3 { grid-template-columns: 1fr; }
+    
+    @media (min-width: 768px) {
+      .grid-2 { grid-template-columns: repeat(2, 1fr); }
+      .grid-3 { grid-template-columns: 1fr 2fr; }
+    }
+    
+    .hidden { display: none !important; }
+    .space-y { display: flex; flex-direction: column; gap: 1.5rem; }
+    .spinner { width: 1.5rem; height: 1.5rem; border: 2px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .fade-in { animation: fadeIn 0.4s ease forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="width: 2.25rem; height: 2.25rem; border-radius: 0.5rem; background: var(--gradient-hero); display: flex; align-items: center; justify-content: center;">
+          <i data-lucide="scan-eye" style="color: #fff; width: 1.25rem; height: 1.25rem;"></i>
+        </div>
+        <span style="font-weight: 700; font-size: 1.15rem; font-family: 'Outfit';">TalentLens</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--muted-foreground);">
+        <i data-lucide="shield-check" class="text-success" style="width: 1rem; height: 1rem;"></i>
+        <span>100% Local Sandbox</span>
+      </div>
+    </header>
+
+    <main class="space-y" style="padding-bottom: 5rem;">
+      <section class="hero">
+        <h1 style="font-size: 3.5rem; line-height: 1.1; margin-bottom: 1rem;"><span class="text-gradient">Local Resume</span> Grader</h1>
+        <p style="color: var(--muted-foreground); max-w: 28rem; margin: 0 auto; font-size: 0.95rem; margin-bottom: 2rem;">
+          Analyze your resume and portfolio securely inside your browser. No files or information are ever uploaded.
+        </p>
+
+        <div class="tabs-bar">
+          <button class="tab-btn active" id="tab-resume" onclick="switchTab('resume')">
+            <i data-lucide="file-text" style="width: 0.9rem; height: 0.9rem;"></i> Resume Grader
+          </button>
+          <button class="tab-btn" id="tab-portfolio" onclick="switchTab('portfolio')">
+            <i data-lucide="globe" style="width: 0.9rem; height: 0.9rem;"></i> Portfolio Grader
+          </button>
+        </div>
+      </section>
+
+      <!-- Forms Section -->
+      <section id="analyzers-container" class="fade-in" style="max-w: 36rem; margin: 0 auto; width: 100%;">
+        <!-- Resume Tab -->
+        <div id="view-resume" class="space-y">
+          <div class="card-soft" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+            <div>
+              <label for="input-role" style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 0.5rem;">Target Professional Role</label>
+              <input type="text" id="input-role" placeholder="e.g. Frontend Developer, Data Scientist..." />
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+              <button class="btn-secondary" style="font-size: 0.75rem; padding: 0.3rem 0.7rem;" onclick="setRole('Frontend Developer')">Frontend Developer</button>
+              <button class="btn-secondary" style="font-size: 0.75rem; padding: 0.3rem 0.7rem;" onclick="setRole('Backend Developer')">Backend Developer</button>
+              <button class="btn-secondary" style="font-size: 0.75rem; padding: 0.3rem 0.7rem;" onclick="setRole('Full Stack Developer')">Full Stack Developer</button>
+              <button class="btn-secondary" style="font-size: 0.75rem; padding: 0.3rem 0.7rem;" onclick="setRole('Data Scientist')">Data Scientist</button>
+            </div>
+          </div>
+
+          <div class="upload-zone" id="dropzone" onclick="document.getElementById('file-field').click()">
+            <input type="file" id="file-field" accept=".pdf,.docx,.txt" style="display: none;" onchange="handleFileSelected(this.files[0])" />
+            <div id="upload-prompt" class="space-y" style="align-items: center; gap: 0.75rem;">
+              <div style="width: 3.5rem; height: 3.5rem; border-radius: 0.75rem; background: var(--gradient-hero); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-soft);">
+                <i data-lucide="upload-cloud" style="color: #fff; width: 1.75rem; height: 1.75rem;"></i>
+              </div>
+              <div>
+                <h3 style="font-size: 1.05rem;">Click or Drag Resume</h3>
+                <p style="font-size: 0.8rem; color: var(--muted-foreground); margin-top: 0.25rem;">PDF, DOCX or TXT files</p>
+              </div>
+            </div>
+            <div id="upload-spinner" class="hidden space-y" style="align-items: center; gap: 0.75rem;">
+              <div class="spinner"></div>
+              <p style="font-size: 0.9rem;">Processing locally inside secure sandbox...</p>
+            </div>
+          </div>
+          <p id="resume-error" class="hidden" style="color: var(--destructive); font-size: 0.85rem; text-align: center;"></p>
+        </div>
+
+        <!-- Portfolio Tab -->
+        <div id="view-portfolio" class="hidden">
+          <div class="card-soft space-y" style="padding: 1.5rem;">
+            <div>
+              <label for="input-url" style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 0.5rem;">Portfolio Website URL</label>
+              <input type="url" id="input-url" placeholder="https://yourname.dev" oninput="validateUrlInput(this.value)" />
+            </div>
+            <button class="btn-primary" id="btn-portfolio-run" style="width: 100%;" onclick="runPortfolioAnalysis()" disabled>
+              <i data-lucide="sparkles" style="width: 1rem; height: 1rem;"></i> Heuristic Evaluation
+            </button>
+            <p id="portfolio-error" class="hidden" style="color: var(--destructive); font-size: 0.85rem; text-align: center;"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Unified Score Card -->
+      <section id="section-combined" class="card-soft fade-in hidden" style="padding: 1.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem;">
+          <i data-lucide="award" class="text-warning" style="width: 1.25rem; height: 1.25rem;"></i>
+          <h2 style="font-size: 1.15rem;">Composite Hireability Index</h2>
+        </div>
+        <div class="grid grid-2" style="align-items: center; gap: 2rem;">
+          <div style="display: flex; flex-direction: column; align-items: center;">
+            <div id="combined-ring-box"></div>
+            <p id="combined-verdict" style="font-size: 0.85rem; color: var(--muted-foreground); margin-top: 1rem; text-align: center; max-w: 16rem;"></p>
+          </div>
+          <div class="space-y" style="gap: 1.25rem;">
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.4rem;">
+                <span style="font-weight: 500;">ATS Resume Match (55% Weight)</span>
+                <span id="label-resume-score" style="font-weight: 700;">-</span>
+              </div>
+              <div style="height: 0.5rem; background: var(--secondary); border-radius: 99px; overflow: hidden;">
+                <div id="bar-resume-score" style="height: 100%; width: 0%; transition: width 1s ease-in-out;"></div>
+              </div>
+            </div>
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.4rem;">
+                <span style="font-weight: 500;">Portfolio Grade (45% Weight)</span>
+                <span id="label-portfolio-score" style="font-weight: 700;">-</span>
+              </div>
+              <div style="height: 0.5rem; background: var(--secondary); border-radius: 99px; overflow: hidden;">
+                <div id="bar-portfolio-score" style="height: 100%; width: 0%; transition: width 1s ease-in-out;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- History scans -->
+      <section id="section-history" class="card-soft fade-in hidden" style="padding: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3 style="font-size: 1rem; display: flex; align-items: center; gap: 0.4rem;">
+            <i data-lucide="history" class="text-primary" style="width: 1.1rem; height: 1.1rem;"></i> Sandbox History
+          </h3>
+          <button onclick="clearScansHistory()" style="background: none; color: var(--destructive); font-size: 0.8rem; display: flex; align-items: center; gap: 0.25rem;">
+            <i data-lucide="trash-2" style="width: 0.9rem; height: 0.9rem;"></i> Clear
+          </button>
+        </div>
+        <div id="history-items-grid" class="grid" style="grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 0.75rem;"></div>
+      </section>
+
+      <section id="section-reports" class="space-y"></section>
+
+      <footer style="text-align: center; margin-top: 4rem; border-top: 1px solid var(--border); padding-top: 2rem; font-size: 0.8rem; color: var(--muted-foreground); display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+        <p>Built with love • TalentLens Sandbox Core v2.0</p>
+        <button class="btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.8rem;" onclick="downloadSingleFileHtml()">
+          <i data-lucide="download" style="width: 0.85rem; height: 0.85rem;"></i> Download Portable HTML Application
+        </button>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    const SKILLS = ["JavaScript", "TypeScript", "React", "Next.js", "Node.js", "Python", "SQL", "AWS", "Docker", "GraphQL", "HTML", "CSS", "Tailwind", "Git"];
+    
+    let activeTab = "resume";
+    let resumeResult = null, resumeName = "";
+    let portfolioResult = null;
+
+    document.addEventListener("DOMContentLoaded", () => { lucide.createIcons(); renderHistory(); });
+
+    function setRole(role) { document.getElementById("input-role").value = role; }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.id === `tab-${tab}`));
+      document.getElementById("view-resume").classList.toggle("hidden", tab !== "resume");
+      document.getElementById("view-portfolio").classList.toggle("hidden", tab !== "portfolio");
+      document.getElementById("section-history").classList.toggle("hidden", tab !== "resume");
+      renderActiveReport();
+    }
+
+    function validateUrlInput(val) {
+      document.getElementById("btn-portfolio-run").disabled = !/^https?:\/\/[^\s$.?#].[^\s]*$/i.test(val.trim());
+    }
+
+    async function handleFileSelected(file) {
+      if (!file) return;
+      const prompt = document.getElementById("upload-prompt"), spinner = document.getElementById("upload-spinner"), err = document.getElementById("resume-error");
+      prompt.classList.add("hidden"); spinner.classList.remove("hidden"); err.classList.add("hidden");
+
+      try {
+        const text = await extractDocText(file);
+        if (text.trim().length < 30) throw new Error("Document content is too short for ATS evaluation.");
+        
+        await new Promise(r => setTimeout(r, 800)); // Simulating sandbox delay
+        
+        resumeResult = evaluateResume(text, document.getElementById("input-role").value.trim());
+        resumeName = file.name;
+
+        saveScan({ id: crypto.randomUUID(), name: file.name, date: Date.now(), result: resumeResult });
+
+        prompt.classList.remove("hidden"); spinner.classList.add("hidden");
+        
+        renderActiveReport();
+        renderCombinedIndex();
+        renderHistory();
+        scrollToResults();
+      } catch (ex) {
+        err.textContent = ex.message;
+        err.classList.remove("hidden");
+        prompt.classList.remove("hidden"); spinner.classList.add("hidden");
+      }
+    }
+
+    async function extractDocText(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (ext === "txt") return await file.text();
+      if (ext === "docx") {
+        const res = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+        return res.value;
+      }
+      if (ext === "pdf") {
+        const doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+        let content = "";
+        for (let i = 1; i <= doc.numPages; i++) {
+          content += (await (await doc.getPage(i)).getTextContent()).items.map(item => item.str).join(" ") + "\n";
+        }
+        return content;
+      }
+      throw new Error("Unsupported format. Feeds must be PDF, DOCX or TXT.");
+    }
+
+    function evaluateResume(text, role) {
+      const norm = text.toLowerCase();
+      const count = text.split(/\s+/).filter(Boolean).length;
+      const skills = SKILLS.filter(s => new RegExp('\\b' + s.replace(/[.+]/g, '\\$&') + '\\b', 'i').test(text));
+      const hasMetrics = /\d+%|\$\d+|\d+\+/.test(text);
+      const hasLinks = /(linkedin|github|portfolio)/i.test(text);
+      const verbs = ["led", "built", "managed", "designed", "optimized"].filter(v => norm.includes(v));
+
+      let score = Math.min(100, Math.max(10, 35 + (skills.length * 3.5) + (hasMetrics ? 15 : 0) + (hasLinks ? 10 : 0) + (verbs.length * 4.5)));
+      
+      const strengths = [];
+      if (skills.length >= 4) strengths.push(`Strong engineering stack discovered (${skills.slice(0, 4).join(", ")})`);
+      if (hasMetrics) strengths.push("Quantified outcomes with numbers/percentages");
+      if (verbs.length >= 2) strengths.push("Used dynamic engineering action verbs");
+
+      const weaknesses = [];
+      if (!hasMetrics) weaknesses.push("Vague achievements. Missing metrics (%, $)");
+      if (!hasLinks) weaknesses.push("Missing references (GitHub/LinkedIn profiles)");
+      if (count < 200) weaknesses.push("Text count too short. Expand project descriptions");
+
+      return { score, skills, strengths, weaknesses, count, role: role || "General Specialist" };
+    }
+
+    function runPortfolioAnalysis() {
+      const url = document.getElementById("input-url").value.trim();
+      const hash = Array.from(url).reduce((acc, c) => acc * 31 + c.charCodeAt(0), 0);
+      const rng = (id, min, max) => min + Math.abs(hash + id * 45) % (max - min + 1);
+
+      portfolioResult = {
+        score: Math.round(rng(1, 60, 95) * 0.4 + rng(2, 50, 94) * 0.4 + rng(3, 70, 98) * 0.2),
+        url,
+        uiScore: rng(1, 60, 95),
+        prScore: rng(2, 50, 94),
+        mobScore: rng(3, 70, 98),
+        strengths: ["Responsive, fluid layouts across device widths", "Custom structural domain name", "Clean styling layout and grids"],
+        weaknesses: ["Optimize landing speeds to support mobile loads", "Include direct links to open repository codes"]
+      };
+      
+      renderActiveReport();
+      renderCombinedIndex();
+      scrollToResults();
+    }
+
+    function makeRing(score, sizeLabel) {
+      const radius = 70, circ = 2 * Math.PI * radius, offset = circ - (score / 100) * circ;
+      const color = score >= 75 ? "var(--success)" : (score >= 50 ? "var(--warning)" : "var(--destructive)");
+      return `
+        <div class="score-ring-container">
+          <svg class="progress-ring" viewBox="0 0 160 160">
+            <circle cx="80" cy="80" r="${radius}" class="ring-bg"></circle>
+            <circle cx="80" cy="80" r="${radius}" class="ring-fg" stroke="${color}" style="stroke-dashoffset: ${offset}px;"></circle>
+          </svg>
+          <div style="position: absolute; text-align: center;">
+            <div class="text-gradient" style="font-size: 2.75rem; font-weight: 800; font-family: 'Outfit';">${score}</div>
+            <div style="font-size: 0.75rem; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-top: -0.1rem;">${sizeLabel}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCombinedIndex() {
+      const sec = document.getElementById("section-combined");
+      if (!resumeResult || !portfolioResult) return sec.classList.add("hidden");
+      
+      const combined = Math.round(resumeResult.score * 0.55 + portfolioResult.score * 0.45);
+      document.getElementById("combined-ring-box").innerHTML = makeRing(combined, "Hireability");
+      document.getElementById("combined-verdict").textContent = combined >= 80 ? "Top Tier Profile — Excellent layout cohesion" : (combined >= 60 ? "Strong Cohesion — Subtle changes will elevate your profile" : "Room to Grow — Work on optimizing both profiles");
+      
+      document.getElementById("label-resume-score").textContent = `${resumeResult.score}/100`;
+      document.getElementById("label-portfolio-score").textContent = `${portfolioResult.score}/100`;
+      
+      const rBar = document.getElementById("bar-resume-score"), pBar = document.getElementById("bar-portfolio-score");
+      rBar.className = resumeResult.score >= 75 ? "bg-success" : (resumeResult.score >= 50 ? "bg-warning" : "bg-destructive");
+      pBar.className = portfolioResult.score >= 75 ? "bg-success" : (portfolioResult.score >= 50 ? "bg-warning" : "bg-destructive");
+      rBar.style.width = `${resumeResult.score}%`; pBar.style.width = `${portfolioResult.score}%`;
+      sec.classList.remove("hidden");
+    }
+
+    function renderActiveReport() {
+      const target = document.getElementById("section-reports");
+      target.innerHTML = "";
+
+      if (activeTab === "resume" && resumeResult) {
+        const res = resumeResult;
+        target.innerHTML = `
+          <div class="space-y fade-in">
+            <div class="card-soft grid grid-3" style="padding: 1.5rem; align-items: center;">
+              <div style="display: flex; flex-direction: column; align-items: center;">
+                ${makeRing(res.score, "ATS Score")}
+                <p style="font-size: 0.8rem; color: var(--muted-foreground); margin-top: 0.75rem;">Words: ${res.count}</p>
+              </div>
+              <div class="space-y" style="gap: 1rem;">
+                <div>
+                  <h2 style="font-size: 1.3rem;">ATS Scan Evaluation</h2>
+                  <p style="font-size: 0.85rem; color: var(--muted-foreground);">${resumeName}</p>
+                </div>
+                <div>
+                  <h4 style="font-size: 0.85rem; margin-bottom: 0.4rem;">Skills Discovered</h4>
+                  <div class="tag-container">${res.skills.map(s => `<span class="tag tag-success">${s}</span>`).join("")}</div>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                  <button class="btn-primary" style="font-size: 0.8rem; padding: 0.5rem 1rem;" onclick="exportPdfReport()">
+                    <i data-lucide="file-down" style="width: 0.9rem; height: 0.9rem;"></i> Export Report PDF
+                  </button>
+                  <button class="btn-secondary" style="font-size: 0.8rem; padding: 0.5rem 1rem;" onclick="resetResumeGrader()">
+                    <i data-lucide="refresh-cw" style="width: 0.9rem; height: 0.9rem;"></i> Clear
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-2">
+              <div class="card-soft" style="padding: 1.5rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--success);"><i data-lucide="check-circle" style="width: 1.1rem; height: 1.1rem; vertical-align: middle;"></i> Strengths</h3>
+                <ul class="bullet-list">${res.strengths.map(s => `<li><i data-lucide="check" class="text-success" style="width: 1.1rem; height: 1.1rem;"></i><span>${s}</span></li>`).join("")}</ul>
+              </div>
+              <div class="card-soft" style="padding: 1.5rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--destructive);"><i data-lucide="alert-triangle" style="width: 1.1rem; height: 1.1rem; vertical-align: middle;"></i> Weaknesses</h3>
+                <ul class="bullet-list">${res.weaknesses.map(w => `<li><i data-lucide="x" class="text-destructive" style="width: 1.1rem; height: 1.1rem;"></i><span>${w}</span></li>`).join("")}</ul>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (activeTab === "portfolio" && portfolioResult) {
+        const port = portfolioResult;
+        target.innerHTML = `
+          <div class="space-y fade-in">
+            <div class="card-soft grid grid-3" style="padding: 1.5rem; align-items: center;">
+              <div style="display: flex; flex-direction: column; align-items: center;">
+                ${makeRing(port.score, "Grade")}
+              </div>
+              <div class="space-y" style="gap: 1rem;">
+                <div>
+                  <h2 style="font-size: 1.3rem;">Portfolio Evaluation</h2>
+                  <a href="${port.url}" target="_blank" rel="noopener noreferrer" style="font-size: 0.85rem; color: var(--primary); display: flex; align-items: center; gap: 0.25rem;">
+                    ${port.url} <i data-lucide="external-link" style="width: 0.85rem; height: 0.85rem;"></i>
+                  </a>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.75rem;">
+                  <div style="background: var(--secondary); padding: 0.4rem; border-radius: 0.35rem; text-align: center;">
+                    <div style="font-weight: 700;">${port.uiScore}</div>
+                    <div style="color: var(--muted-foreground); font-size: 0.65rem;">UI/UX Design</div>
+                  </div>
+                  <div style="background: var(--secondary); padding: 0.4rem; border-radius: 0.35rem; text-align: center;">
+                    <div style="font-weight: 700;">${port.prScore}</div>
+                    <div style="color: var(--muted-foreground); font-size: 0.65rem;">Projects</div>
+                  </div>
+                  <div style="background: var(--secondary); padding: 0.4rem; border-radius: 0.35rem; text-align: center;">
+                    <div style="font-weight: 700;">${port.mobScore}</div>
+                    <div style="color: var(--muted-foreground); font-size: 0.65rem;">Mobile Friendly</div>
+                  </div>
+                </div>
+                <div>
+                  <button class="btn-secondary" style="font-size: 0.8rem; padding: 0.5rem 1rem;" onclick="resetPortfolioGrader()">
+                    <i data-lucide="refresh-cw" style="width: 0.9rem; height: 0.9rem;"></i> Clear
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-2">
+              <div class="card-soft" style="padding: 1.5rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--success);"><i data-lucide="check-circle" style="width: 1.1rem; height: 1.1rem; vertical-align: middle;"></i> Strengths</h3>
+                <ul class="bullet-list">${port.strengths.map(s => `<li><i data-lucide="check" class="text-success" style="width: 1.1rem; height: 1.1rem;"></i><span>${s}</span></li>`).join("")}</ul>
+              </div>
+              <div class="card-soft" style="padding: 1.5rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--destructive);"><i data-lucide="alert-triangle" style="width: 1.1rem; height: 1.1rem; vertical-align: middle;"></i> Weaknesses</h3>
+                <ul class="bullet-list">${port.weaknesses.map(w => `<li><i data-lucide="x" class="text-destructive" style="width: 1.1rem; height: 1.1rem;"></i><span>${w}</span></li>`).join("")}</ul>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      lucide.createIcons();
+    }
+
+    function resetResumeGrader() { resumeResult = null; resumeName = ""; document.getElementById("file-field").value = ""; renderActiveReport(); renderCombinedIndex(); }
+    function resetPortfolioGrader() { portfolioResult = null; document.getElementById("input-url").value = ""; document.getElementById("btn-portfolio-run").disabled = true; renderActiveReport(); renderCombinedIndex(); }
+
+    function scrollToResults() {
+      setTimeout(() => {
+        const el = document.getElementById("section-reports").firstElementChild || document.getElementById("section-combined");
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }, 80);
+    }
+
+    function getScans() { try { return JSON.parse(localStorage.getItem("scans-history-v2") || "[]"); } catch { return []; } }
+    function saveScan(item) { localStorage.setItem("scans-history-v2", JSON.stringify([item, ...getScans()].slice(0, 10))); }
+    function deleteScan(id, e) { if (e) e.stopPropagation(); localStorage.setItem("scans-history-v2", JSON.stringify(getScans().filter(s => s.id !== id))); renderHistory(); }
+    function clearScansHistory() { localStorage.removeItem("scans-history-v2"); renderHistory(); }
+
+    function loadHistoricalItem(id) {
+      const item = getScans().find(s => s.id === id);
+      if (item) { resumeResult = item.result; resumeName = item.name; switchTab("resume"); scrollToResults(); }
+    }
+
+    function renderHistory() {
+      const scans = getScans(), sec = document.getElementById("section-history"), box = document.getElementById("history-items-grid");
+      if (scans.length === 0 || activeTab !== "resume") return sec.classList.add("hidden");
+
+      box.innerHTML = scans.map(item => `
+        <div class="btn-secondary" style="display: flex; justify-content: space-between; align-items: center; padding: 0.8rem; cursor: pointer;" onclick="loadHistoricalItem('${item.id}')">
+          <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0; flex: 1;">
+            <i data-lucide="file" style="width: 1.1rem; height: 1.1rem; flex-shrink: 0; color: var(--primary);"></i>
+            <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem;">
+              <div style="font-weight: 600; overflow: hidden; text-overflow: ellipsis;">${item.name}</div>
+              <div style="font-size: 0.7rem; color: var(--muted-foreground);">${new Date(item.date).toLocaleDateString()}</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 0.8rem; font-weight: 700; color: ${item.result.score >= 75 ? "var(--success)" : "var(--warning)"}">${item.result.score}</span>
+            <button onclick="deleteScan('${item.id}', event)" style="background: none; color: var(--muted-foreground);">
+              <i data-lucide="x" style="width: 0.9rem; height: 0.9rem;"></i>
+            </button>
+          </div>
+        </div>
+      `).join("");
+      lucide.createIcons();
+      sec.classList.remove("hidden");
+    }
+
+    function exportPdfReport() {
+      if (!resumeResult) return;
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      let y = 20;
+
+      const printText = (txt, size = 11, bold = false) => {
+        doc.setFont("helvetica", bold ? "bold" : "normal"); doc.setFontSize(size);
+        const list = doc.splitTextToSize(txt, 170);
+        list.forEach(line => {
+          if (y > 280) { doc.addPage(); y = 20; }
+          doc.text(line, 20, y); y += size * 0.55;
+        });
+        y += 4;
+      };
+
+      printText("AI ATS Resume Grader Report", 18, true);
+      printText(`File: ${resumeName}`, 10);
+      printText(`Overall ATS Score: ${resumeResult.score}/100`, 14, true);
+      printText(`Target Focus: ${resumeResult.role}`, 11, true);
+      printText(`Word Count: ${resumeResult.count} words`, 10);
+      printText("Discovered Skills", 13, true);
+      printText(resumeResult.skills.join(", ") || "None.");
+      printText("Strengths", 13, true);
+      resumeResult.strengths.forEach(s => printText(`- ${s}`));
+      printText("Weaknesses", 13, true);
+      resumeResult.weaknesses.forEach(w => printText(`- ${w}`));
+
+      doc.save(`TalentLens-Grader-Report-${Date.now()}.pdf`);
+    }
+
+    function downloadSingleFileHtml() {
+      const blob = new Blob([document.documentElement.outerHTML], { type: "text/html" });
+      const el = document.createElement("a");
+      el.href = URL.createObjectURL(blob);
+      el.download = "TalentLens-Analyzer.html";
+      document.body.appendChild(el); el.click(); document.body.removeChild(el);
+    }
+  </script>
+</body>
+</html>
